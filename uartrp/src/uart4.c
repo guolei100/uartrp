@@ -2,7 +2,7 @@
 #include "uart_repeater.h" 
 #include "uart4.h"
 
-#define    TIMER4_RELOAD_VALUE 	(MAIN_Fosc /100)//1秒100次
+#define    TIMER4_RELOAD_VALUE 	TIMER_RELOAD_VALUE
 
 
 
@@ -29,7 +29,11 @@ void timer4_irq(void) interrupt 20
 	IE2   &= ~0x40;//禁止中断
 	MUTEX_LOCK();
 	uartRepeater.inUart2.recStat    = FRAME_RECEIVED;
+#if  DEBUG_FRAM_TRACK
+	uartRepeater.inUart2.frmRevCnt++;
+#endif
 	MUTEX_UNLOCK();
+	P33 = 1;
 }
 
 
@@ -142,9 +146,12 @@ void uart4_irq(void) interrupt 18  // 串行口4中断函数
 	}
 	if(RI4)
 	{
+		P33 = 0;
 		CLR_RI4();
 		byte = S4BUF;
-		//S4BUF = byte;
+#if TEST_UART		
+		S4BUF = byte;
+#else
 		T4T3M &= ~0x80;//stop timer4
 		T4H = (u8)((65536UL - TIMER4_RELOAD_VALUE/12) / 256);
 		T4L = (u8)((65536UL - TIMER4_RELOAD_VALUE/12) % 256);
@@ -152,6 +159,7 @@ void uart4_irq(void) interrupt 18  // 串行口4中断函数
 		IE2   |= 0x40;//使能中断
 		
 		inuart_receive_isr(byte, &uartRepeater.outUart, &uartRepeater.inUart2);
+#endif		
 	}
 	//EA = 1;//开中断
 }

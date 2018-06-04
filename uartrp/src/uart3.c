@@ -4,7 +4,7 @@
 
 
 
-#define    TIMER3_RELOAD_VALUE 	(MAIN_Fosc /100)//1秒100次
+#define    TIMER3_RELOAD_VALUE 	TIMER_RELOAD_VALUE
 
 
 volatile bit	tx3Busy = 0;
@@ -29,8 +29,11 @@ void timer3_irq(void) interrupt 19
 	IE2   &= ~0x20;//禁止中断
 	MUTEX_LOCK();
 	uartRepeater.outUart.uart.recStat    = FRAME_RECEIVED;
+#if  DEBUG_FRAM_TRACK
+	uartRepeater.outUart.uart.frmRevCnt++;
+#endif
 	MUTEX_UNLOCK();
-	P32 = 1;
+//	P32 = 1;
 
 	
 }
@@ -147,10 +150,12 @@ void uart3_irq(void) interrupt 17  // 串行口3中断函数
 	}
 	if(RI3)
 	{
-		P32 = 0;
+//		P32 = 0;
 		CLR_RI3();
-		byte = S3BUF;		
-		//S3BUF=byte;
+		byte = S3BUF;
+#if TEST_UART		
+		S3BUF=byte;
+#else
 		T4T3M &= ~0x08;//stop timer3
 		T3H = (u8)((65536UL - TIMER3_RELOAD_VALUE/12) / 256);
 		T3L = (u8)((65536UL - TIMER3_RELOAD_VALUE/12) % 256);
@@ -158,6 +163,7 @@ void uart3_irq(void) interrupt 17  // 串行口3中断函数
 		IE2   |= 0x20;
 		
 		outuart_receive_isr(byte, &uartRepeater);
+#endif		
 	}
 	//EA = 1;//开中断
 }

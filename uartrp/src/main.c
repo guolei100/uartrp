@@ -126,7 +126,7 @@ void run_led(void)
 	if(5000==(cnt++))
 	{
 		LED = LED_ON;
-
+		P32 = 0;
 		
 		P24 = 0;
 		//P22 = 0;
@@ -226,10 +226,9 @@ void main()
 	//timer_init(get_tick_ms,0xffffffff);
 	
 	LED = LED_OFF;
+	P32 = 0;
 	
 	//enable interrupt
-	EA = 1;
-	delay_ms(10);
 	if(repeater_init() )
 	{
 		DEBUG("repeater_init fail\r\n");
@@ -238,6 +237,7 @@ void main()
 	{
 		DEBUG("repeater_init successfully\r\n");
 	}
+	
 	//test_printf();
 	//test_eeprom();
 
@@ -248,6 +248,7 @@ void main()
 	{
 		repeater_running();
 		//run_led();
+		//uart_transmit_dev();
 		
 		//timeout = (12*D_WDT_SCALE_16*32768)/MAIN_Fosc
 		WDT_CONTR = (D_EN_WDT + D_CLR_WDT + D_WDT_SCALE_128);	//watchdog

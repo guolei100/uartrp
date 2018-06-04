@@ -1,17 +1,21 @@
 #include "STC15W4K.h"      // 包含 "STC15W4K.H"寄存器定义头文件
 #include "uart_repeater.h" 
 
-#define	TIMER0_RELOAD_VALUE 	(MAIN_Fosc / 100)		//Timer 1 中断频率, 100次/秒
 
+
+#define  TIMER0_RELOAD_VALUE  (MAIN_Fosc / 200)         //     超时:5ms 
 
 volatile bit	tx1_Busy = 0;
 
 static enum ODD_EVEN uart1OddEven = NONE_ODD_EVEN;
+static u8 CntOf5ms = 0;
 
+int (*pTmr1Out_callback)(void );
 
 
 void timer0_init(void)
 {
+		pTmr1Out_callback = NULL;
 		TR0 = 0;	//停止计数
 
 	#if (TIMER0_RELOAD_VALUE < 64)	// 如果用户设置值不合适， 则不启动定时器
@@ -53,9 +57,37 @@ void timer0_irq(void) interrupt 1
 	ET0=0;
 	TR0=0;
 	TF0=0;
-	MUTEX_LOCK();
-	uartRepeater.proUart.recStat = FRAME_RECEIVED;
-	MUTEX_UNLOCK();
+	if(CntOf5ms)
+	{
+		CntOf5ms--;
+		
+	#if (TIMER0_RELOAD_VALUE < 65536UL)
+		TH0 = (u8)((65536UL - TIMER0_RELOAD_VALUE) / 256);
+		TL0 = (u8)((65536UL - TIMER0_RELOAD_VALUE) % 256);
+	#else
+		TH0 = (u8)((65536UL - TIMER0_RELOAD_VALUE/12) / 256);
+		TL0 = (u8)((65536UL - TIMER0_RELOAD_VALUE/12) % 256);
+	#endif
+		ET0=1;
+	  	TR0=1;
+	}
+	else
+	{
+		MUTEX_LOCK();
+		if(pTmr1Out_callback)
+		{
+			pTmr1Out_callback();
+			pTmr1Out_callback = NULL;
+		}
+		else
+		{
+			uartRepeater.proUart.recStat = FRAME_RECEIVED;
+#if  DEBUG_FRAM_TRACK
+			uartRepeater.proUart.frmRevCnt++;
+#endif
+		}
+		MUTEX_UNLOCK();
+	}
 	 
 }
 
@@ -164,6 +196,39 @@ char putchar(char c)
     return c;
 }
 
+
+
+void start_timer1(u8 countOf5ms,int (*pcallback)(void ))
+{
+		CntOf5ms = countOf5ms;
+		pTmr1Out_callback = pcallback;
+		TR0=0;
+	#if (TIMER0_RELOAD_VALUE < 65536UL)
+		TH0 = (u8)((65536UL - TIMER0_RELOAD_VALUE) / 256);
+		TL0 = (u8)((65536UL - TIMER0_RELOAD_VALUE) % 256);
+	#else
+		TH0 = (u8)((65536UL - TIMER0_RELOAD_VALUE/12) / 256);
+		TL0 = (u8)((65536UL - TIMER0_RELOAD_VALUE/12) % 256);
+	#endif
+		ET0=1;
+	  	TR0=1;
+}
+void stop_timer1(void)
+{
+	
+		ET0=0;
+		TR0=0;
+		TF0=0;
+	#if (TIMER0_RELOAD_VALUE < 65536UL)
+		TH0 = (u8)((65536UL - TIMER0_RELOAD_VALUE) / 256);
+		TL0 = (u8)((65536UL - TIMER0_RELOAD_VALUE) % 256);
+	#else
+		TH0 = (u8)((65536UL - TIMER0_RELOAD_VALUE/12) / 256);
+		TL0 = (u8)((65536UL - TIMER0_RELOAD_VALUE/12) % 256);
+	#endif
+}
+
+
 void uart1_irq(void) interrupt 4  // 串行口1中断函数
 {
 	u8 byte;
@@ -178,20 +243,13 @@ void uart1_irq(void) interrupt 4  // 串行口1中断函数
 	{
 		RI = 0;
 		byte = SBUF;
-		
-		//SBUF = byte;	   // 启动数据发送过程		
-		
-		TR0=0;
-	#if (TIMER0_RELOAD_VALUE < 65536UL)
-		TH0 = (u8)((65536UL - TIMER0_RELOAD_VALUE) / 256);
-		TL0 = (u8)((65536UL - TIMER0_RELOAD_VALUE) % 256);
-	#else
-		TH0 = (u8)((65536UL - TIMER0_RELOAD_VALUE/12) / 256);
-		TL0 = (u8)((65536UL - TIMER0_RELOAD_VALUE/12) % 256);
-	#endif
-		ET0=1;
-	  	TR0=1;
+		uartRepeater.mode = SET_UP;
+#if TEST_UART		
+		SBUF = byte;	   // 启动数据发送过程		
+#else		
+		start_timer1(2,NULL);
 		prouart_isr(byte,&uartRepeater.proUart);
+#endif	
 	
 	}
 	//EA = 1;//开中断

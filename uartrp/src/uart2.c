@@ -5,7 +5,7 @@
 
 
 
-#define    TIMER1_RELOAD_VALUE 	(MAIN_Fosc /100)//1秒100次
+#define    TIMER1_RELOAD_VALUE 	TIMER_RELOAD_VALUE
 
 volatile bit	tx2Busy = 0;
 
@@ -42,6 +42,9 @@ void timer1_irq(void) interrupt  3
 	TF1 = 0;
 	MUTEX_LOCK();
 	uartRepeater.inUart1.recStat    = FRAME_RECEIVED;
+#if  DEBUG_FRAM_TRACK
+	uartRepeater.inUart1.frmRevCnt++;
+#endif
 	MUTEX_UNLOCK();
 	
 }
@@ -180,8 +183,7 @@ void uart2_irq(void) interrupt 8  // 串行口2中断函数
 	{
 		CLR_RI2();
 		byte = S2BUF;
-		//SBUF = byte;
-#if  0		 
+#if  TEST_UART		 
 		S2BUF = byte;
 #else
 		TR1 = 0;
@@ -197,7 +199,6 @@ void uart2_irq(void) interrupt 8  // 串行口2中断函数
 		{
 			prouart_isr(byte,  &uartRepeater.inUart1);
 		}
-		P32 = ~P32;
 #endif	
 	//EA = 1;//开中断
 	}

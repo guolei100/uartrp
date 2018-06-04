@@ -23,5 +23,8 @@ extern void uart1_send(u8 *pbuf,u16 n);
 extern char putchar(char c);
 extern void UART1_SendString(char *s);
 
+extern void start_timer1(u8 countOf5ms,int (*pcallback)(void ));
+extern void stop_timer1(void);
+
 #endif
 

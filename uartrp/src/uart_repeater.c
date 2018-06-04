@@ -98,25 +98,22 @@ u8 odd_even_detect(u8 byte)
 	}
 }
 
-int outuart_response_timer_out_callback(void *pArg)
-{
-	UART_RETPEATER *prepeater;
+static u8 ansStartTimer = 0;
 
-	if(NULL == pArg)
-	{
-		return -1;
-	}
+int outuart_response_timer_out_callback(void )
+{
 	
-	prepeater = (UART_RETPEATER *)pArg;
+	
 	MUTEX_LOCK();
-	prepeater->outUart.conUart            = NONE_UART;
-	prepeater->outUart.uart.sendStat      = NO_SEND;//outUart only have NO_SEND and SENDING stat
-	prepeater->outUart.uart.recStat       = NO_RECEIVE;
-	prepeater->outUart.uart.baud.uartPort = UART3_PORT;
-	prepeater->outUart.uart.revLen        = 0;
-	prepeater->outUart.uart.sendLen       = 0;
-	prepeater->outUart.uart.revIndex      = 0;
-	prepeater->outUart.uart.sendIndex     = 0;
+	uartRepeater.outUart.conUart            = NONE_UART;
+	uartRepeater.outUart.uart.sendStat      = NO_SEND;//outUart only have NO_SEND and SENDING stat
+	uartRepeater.outUart.uart.recStat       = NO_RECEIVE;
+	uartRepeater.outUart.uart.baud.uartPort = UART3_PORT;
+	uartRepeater.outUart.uart.revLen        = 0;
+	uartRepeater.outUart.uart.sendLen       = 0;
+	uartRepeater.outUart.uart.revIndex      = 0;
+	uartRepeater.outUart.uart.sendIndex     = 0;
+	ansStartTimer                           = 0;
 	MUTEX_UNLOCK();
 	
 	return 0;
@@ -178,6 +175,10 @@ void outuart_receive_isr(u8 recByte, UART_RETPEATER *prepeater)
 		MUTEX_LOCK();
 		prepeater->outUart.uart.recStat = FRAME_RECEIVING;
 		MUTEX_UNLOCK();
+		if(ansStartTimer)
+		{
+			stop_timer1();
+		}
 	}
 	else
 	{
@@ -209,6 +210,7 @@ void inuart_receive_isr(u8 recByte, OUT_UART *pOutUart, UART_WAY *pInUart)
 	if(pInUart->revIndex >= sizeof(pInUart->revBuf) )
 	{
 		pInUart->revIndex = 0;
+		//pInUart->revLen = 0;
 	}
 	pInUart->revBuf[pInUart->revIndex] = recByte;
 	pInUart->revIndex++;
@@ -221,20 +223,29 @@ void inuart_receive_isr(u8 recByte, OUT_UART *pOutUart, UART_WAY *pInUart)
 }
 
 
+void close_repeater(void);
+
+
 void prouart_isr(u8 recByte, UART_WAY *pProUart)
 {
 	MUTEX_LOCK();
 	
-	
-	if(pProUart->revIndex >= sizeof(pProUart->revBuf) )
+	if(pProUart)
 	{
-		pProUart->revIndex = 0;
+		if(UART1_PORT == pProUart->baud.uartPort)
+		{
+			close_repeater();//从uart1收到数据，关掉转发功能
+		}
+		if(pProUart->revIndex >= sizeof(pProUart->revBuf) )
+		{
+			pProUart->revIndex = 0;
+			//pProUart->revLen = 0;
+		}
+		pProUart->revBuf[pProUart->revIndex] = recByte;
+		pProUart->revIndex++;
+		pProUart->revLen++;
+		pProUart->recStat = FRAME_RECEIVING;
 	}
-	pProUart->revBuf[pProUart->revIndex] = recByte;
-	pProUart->revIndex++;
-	pProUart->revLen++;
-	pProUart->recStat = FRAME_RECEIVING;
-	
 	MUTEX_UNLOCK();
 }
 
@@ -263,10 +274,6 @@ static u8 from_uart_to_another_uart(UART_WAY *pFrom,UART_WAY *pToUart)
 		if(pToUart->send_fun)
 		{
 			pToUart->send_fun(&pFrom->revBuf[pToUart->sendIndex],1);
-			if(pToUart->send_fun == uart4_send)
-			{
-				//uart1_send(&pFrom->revBuf[pToUart->sendIndex],1);
- 			}
 		}
 		else
 		{
@@ -371,6 +378,9 @@ void reponse_inuart( UART_RETPEATER *prepeater)
 		sendEnd = send_to_in_uart(&prepeater->inUart1,&prepeater->outUart.uart);
 		if(sendEnd)
 		{
+#if  DEBUG_FRAM_TRACK
+				uartRepeater.outUart.uart.frmSndCnt++;		
+#endif	
 			prepeater->outUart.uart.sendLen   = 0;
 			prepeater->outUart.uart.sendIndex = 0;
 			if(prepeater->inUart2.revLen > 0)
@@ -395,6 +405,9 @@ MUTEX_UNLOCK();
 		sendEnd = send_to_in_uart(&prepeater->inUart2, &prepeater->outUart.uart);
 		if(sendEnd)
 		{
+#if  DEBUG_FRAM_TRACK
+				uartRepeater.outUart.uart.frmSndCnt++;		
+#endif			
 			prepeater->outUart.uart.sendLen   = 0;
 			prepeater->outUart.uart.sendIndex = 0;
 			if(prepeater->inUart1.revLen > 0)
@@ -430,14 +443,20 @@ void repeater_transmiting(void)
 	{
 		if(SENDING == uartRepeater.outUart.uart.sendStat)
 		{
-			
 			A_RS485_SEND_ENABLE();
 			sndEnd = send_to_out_uart(&uartRepeater.inUart1,&uartRepeater.outUart.uart);
 			if(sndEnd)
 			{
 				A_RS485_SEND_DISABLE();
-				//加个超时机制，以判断outUart在规定时间人没有应答
-				//start_timer(uartRepeater.outUart.presTimer);
+				//加个超时机制，以判断outUart在规定时间内没有应答
+				if(0 == ansStartTimer)
+				{
+					ansStartTimer = 1;
+					start_timer1(10,outuart_response_timer_out_callback);
+				}
+#if  DEBUG_FRAM_TRACK
+				uartRepeater.inUart1.frmSndCnt++;		
+#endif
 			}
 		}
 		
@@ -451,8 +470,16 @@ void repeater_transmiting(void)
 			if(sndEnd)
 			{
 				//B_RS485_SEND_DISABLE();
+
 				//加个超时机制，以判断outUart在规定时间人没有应答
-				//start_timer(uartRepeater.outUart.presTimer);
+				if(0 == ansStartTimer)
+				{
+					ansStartTimer = 1;
+					start_timer1(10,outuart_response_timer_out_callback);
+				}
+#if  DEBUG_FRAM_TRACK
+				uartRepeater.inUart2.frmSndCnt++;		
+#endif				
 			}
 		}
 		
@@ -592,6 +619,21 @@ void clear_pro_uart(void)
 }
 
 
+void close_repeater(void)
+{
+	UART2_INT_DISABLE();
+	UART3_INT_DISABLE();
+	UART4_INT_DISABLE();
+}
+void open_repeater(void)
+{
+	UART2_INT_ENABLE();
+	UART3_INT_ENABLE();
+	UART4_INT_ENABLE();
+}
+
+
+#define DEBUG_SET_BUAD   0
 u8 send_cmd_wifi(u8 *pSndDat, u32 len)
 {
 	u16 cnt = 0;
@@ -605,6 +647,7 @@ u8 send_cmd_wifi(u8 *pSndDat, u32 len)
 	
 	clear_wifi_uart();
 	uartRepeater.wifiCommStep = 1;
+	UART2_INT_ENABLE();//打开uart2，以接收其响应数据
 	if(uartRepeater.inUart1.send_fun)
 		uartRepeater.inUart1.send_fun("+++",3);//进入命令模式
 
@@ -615,8 +658,25 @@ u8 send_cmd_wifi(u8 *pSndDat, u32 len)
 		if('a'== uartRepeater.inUart1.revBuf[0])
 		{
 			uartRepeater.wifiCommStep++;
+#if	DEBUG_SET_BUAD		
+			DEBUG("wifi answer a\r\n");
+#endif
 		}
+#if	DEBUG_SET_BUAD			
+		else
+		{
+			DEBUG("send \"+++\" to wifi answer: %hd byte\r\n",uartRepeater.inUart1.revLen);
+			uart1_send(uartRepeater.inUart1.revBuf,uartRepeater.inUart1.revLen);
+		}
+#endif		
 	}
+#if	DEBUG_SET_BUAD			
+	else
+	{
+		DEBUG("send \"+++\" to wiif no answer \r\n");
+	}
+#endif		
+	
 	
 	
 	clear_wifi_uart();
@@ -633,8 +693,22 @@ u8 send_cmd_wifi(u8 *pSndDat, u32 len)
 				uartRepeater.wifiCommStep++;
 				errCode = 0;
 			}
+#if	DEBUG_SET_BUAD			
+			else
+			{
+				DEBUG("send \"a\" to wifi answer %hd byte\r\n",uartRepeater.inUart1.revLen);
+				uart1_send(uartRepeater.inUart1.revBuf,uartRepeater.inUart1.revLen);
+			}
+#endif		
 			
 		}
+#if	DEBUG_SET_BUAD			
+		else
+		{
+			DEBUG("send \"a\" to wiif no answer \r\n");
+		}
+#endif		
+
 	}
 
 	if(0==errCode)
@@ -718,6 +792,7 @@ u8 send_cmd_wifi(u8 *pSndDat, u32 len)
 u32 calc_sum(UART_BAUD *pbaud);
 void print_buad(UART_BAUD *pbaud);
 
+extern void repeater_stat_init(void);
 
 void explain_pro(void)
 {
@@ -727,12 +802,13 @@ void explain_pro(void)
 	
 	if(FRAME_RECEIVED == uartRepeater.proUart.recStat)
 	{
+		
 		uartRepeater.proUart.recStat = NO_RECEIVE;
 		
 		//DEBUG("rev data %hd:",uartRepeater.proUart.revLen);
 		//uart1_send(uartRepeater.proUart.revBuf,uartRepeater.proUart.revLen);
 		//DEBUG(" \r\n");
-		if(8==uartRepeater.proUart.revLen)
+		if((7<=uartRepeater.proUart.revLen) && (uartRepeater.proUart.revLen<=10) )
 		{
 			//DEBUG("get uart baud\r\n");
 			if(0 == strncasecmp("AT+UART",uartRepeater.proUart.revBuf,7))
@@ -821,17 +897,39 @@ void explain_pro(void)
 				
 			}
 		}
+		repeater_stat_init();
+		open_repeater();
+		uartRepeater.mode = NORMAL_COM;
 		
 	}
 }
 
 void repeater_running(void)
 {
+#if	DEBUG_FRAM_TRACK
+	static u32 count = 0;
+#endif	
 	if(NORMAL_COM == uartRepeater.mode)
 	{
 		repeater_transmiting();
 	}
 	explain_pro();
+#if	DEBUG_FRAM_TRACK	
+	if(count++ >= 120000)
+	{
+		count = 0;
+		if(NORMAL_COM == uartRepeater.mode)
+		{
+			DEBUG("normal mode ...\r\n");
+		}
+		DEBUG("wifi rec frm:%hd snd frm:%hd\r\n",\
+			uartRepeater.inUart1.frmRevCnt,uartRepeater.inUart1.frmSndCnt);
+		DEBUG("B rec frm:%hd snd frm:%hd\r\n",\
+			uartRepeater.inUart2.frmRevCnt,uartRepeater.inUart2.frmSndCnt);
+		DEBUG("A rec frm:%hd snd frm:%hd\r\n",\
+			uartRepeater.outUart.uart.frmRevCnt,uartRepeater.outUart.uart.frmSndCnt);
+	}
+#endif	
 }
 
 
@@ -845,6 +943,10 @@ void repeater_stat_init(void)
 	uartRepeater.outUart.uart.sendLen       = 0;
 	uartRepeater.outUart.uart.revIndex      = 0;
 	uartRepeater.outUart.uart.sendIndex     = 0;
+#if  DEBUG_FRAM_TRACK	
+	uartRepeater.outUart.uart.frmRevCnt     = 0;
+	uartRepeater.outUart.uart.frmSndCnt     = 0;
+#endif	
 
 	//inUart1 init
 	uartRepeater.inUart1.sendStat           = NO_SEND;
@@ -854,7 +956,11 @@ void repeater_stat_init(void)
 	uartRepeater.inUart1.sendLen            = 0;
 	uartRepeater.inUart1.revIndex           = 0;
 	uartRepeater.inUart1.sendIndex          = 0;
-
+	
+#if  DEBUG_FRAM_TRACK	
+	uartRepeater.inUart1.frmRevCnt          = 0;
+	uartRepeater.inUart1.frmSndCnt          = 0;
+#endif
 	//inUart2 init
 	uartRepeater.inUart2.sendStat           = NO_SEND;
 	uartRepeater.inUart2.recStat            = NO_RECEIVE;
@@ -863,7 +969,10 @@ void repeater_stat_init(void)
 	uartRepeater.inUart2.sendLen            = 0;
 	uartRepeater.inUart2.revIndex           = 0;
 	uartRepeater.inUart2.sendIndex          = 0;
-
+#if  DEBUG_FRAM_TRACK	
+	uartRepeater.inUart2.frmRevCnt          = 0;
+	uartRepeater.inUart2.frmSndCnt          = 0;
+#endif
 	uartRepeater.proUart.sendStat           = NO_SEND;
 	uartRepeater.proUart.recStat            = NO_RECEIVE;
 	uartRepeater.proUart.baud.uartPort      = UART1_PORT;
@@ -871,7 +980,10 @@ void repeater_stat_init(void)
 	uartRepeater.proUart.sendLen            = 0;
 	uartRepeater.proUart.revIndex           = 0;
 	uartRepeater.proUart.sendIndex          = 0;
-
+#if  DEBUG_FRAM_TRACK	
+	uartRepeater.proUart.frmRevCnt          = 0;
+	uartRepeater.proUart.frmSndCnt          = 0;
+#endif
 	
 }
 
@@ -908,7 +1020,7 @@ void buad_cpy(UART_BAUD *pBaudSrc,UART_BAUD *pBaudTo)
 
 void uart_baud_defult(void)
 {
-	uartRepeater.proUart.baud.baud     = 9600;
+	uartRepeater.proUart.baud.baud     = DEFAULT_BAUD;
 	uartRepeater.proUart.baud.dataLen  = 8;
 	uartRepeater.proUart.baud.oddEven  = ODD;
 	uartRepeater.proUart.baud.stopBits = 1;
@@ -919,12 +1031,15 @@ void uart_baud_defult(void)
 	buad_cpy(&uartRepeater.proUart.baud,     &uartRepeater.outUart.uart.baud);
 }
 
-void uart_init(void)
+u8 uart_init(void)
 {
 	u32 sum;
 	u8 err = 0;
-	
+#if  SET_BAUD_DEFULT
+	if(0)
+#else
 	if(SAVE_MARK == uartRepeater.proUart.baud.saveMark)
+#endif		
 	{
 		sum = calc_sum(&uartRepeater.proUart.baud);
 		if(uartRepeater.proUart.baud.sum == sum)
@@ -950,18 +1065,8 @@ void uart_init(void)
 	uart1_init(uartRepeater.proUart.baud.oddEven);
 	uart4_init(uartRepeater.proUart.baud.oddEven);
 	uart3_init(uartRepeater.proUart.baud.oddEven);
-	switch(err)
-	{
-		case 0:
-			DEBUG("uart baud read from eeprom\r\n");
-			break;
-		case 1:
-			DEBUG("uart baud sum is err\r\n");
-			break;
-		case 2:
-			DEBUG("uart baud is default\r\n");
-			break;
-	}
+	
+	return err;
 }
 
 
@@ -1003,9 +1108,25 @@ void print_buad(UART_BAUD *pbaud)
 }
 s8 repeater_init(void)
 {
+	u8 err;
+	
 	read_buad(&uartRepeater.proUart.baud);
-	uart_init();
+	err = uart_init();
+	
 	repeater_stat_init();
+	EA = 1;
+	switch(err)
+	{
+		case 0:
+			DEBUG("baud read from eeprom\r\n");
+			break;
+		case 1:
+			DEBUG("sum err\r\n");
+			break;
+		case 2:
+			DEBUG("baud is default\r\n");
+			break;
+	}
 
 	print_buad(&uartRepeater.outUart.uart.baud);
 	print_buad(&uartRepeater.inUart1.baud);
@@ -1015,7 +1136,7 @@ s8 repeater_init(void)
 	uartRepeater.mode = NORMAL_COM;
 	uartRepeater.wifiCommStep = 0;
 	
-#if 1	
+#if 0	
 	DEBUG("out:%bd in1:%bd in2:%bd\r\n",uartRepeater.outUart.conUart,\
 		uartRepeater.inUart1.baud.uartPort,uartRepeater.inUart2.baud.uartPort);
 #endif
@@ -1056,8 +1177,30 @@ s8 repeater_init(void)
 #endif	
 
 	uartRepeater.proUart.send_fun           = uart1_send;
+
+	
+
 	return 0;
 }
+
+
+void uart_transmit_dev(void)
+{
+	if(FRAME_RECEIVED == uartRepeater.proUart.recStat)
+	{
+		
+		uart1_send(uartRepeater.proUart.revBuf,uartRepeater.proUart.revLen);
+		memset(uartRepeater.proUart.revBuf, 0, sizeof(uartRepeater.proUart.revBuf));
+		uartRepeater.proUart.revIndex = 0;
+		uartRepeater.proUart.revLen = 0;
+		uartRepeater.proUart.recStat = NO_RECEIVE;
+
+		uartRepeater.proUart.sendIndex = 0;
+		uartRepeater.proUart.sendLen = 0;
+		uartRepeater.proUart.sendStat = NO_SEND;
+	}
+}
+
 
 
 

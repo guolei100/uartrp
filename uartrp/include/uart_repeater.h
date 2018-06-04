@@ -86,13 +86,17 @@ typedef struct Uart_Way
 	enum SEND_STATE      sendStat;//转发状态
 	enum RECEIVE_STATE   recStat;
 	UART_BAUD  baud;
-	TIMER_TABLE* pTimer;
+	//TIMER_TABLE* pTimer;
 	send   send_fun; 
 	u8  revBuf[REV_BUFF_LEN];
 	u16 revLen;
 	u16 revIndex; 
 	u16 sendLen;//转发长度
-	u16 sendIndex; 
+	u16 sendIndex;
+#if  DEBUG_FRAM_TRACK	
+	u16 frmRevCnt;
+	u16 frmSndCnt;
+#endif	
 }UART_WAY;
 
 
@@ -128,6 +132,6 @@ extern void inuart_receive_isr(u8 recByte, OUT_UART *pOutUart, UART_WAY *pInUart
 extern void prouart_isr(u8 recByte, UART_WAY *pProUart);
 extern void repeater_running(void);
 extern s8 repeater_init(void); 
-
+extern void uart_transmit_dev(void);
 #endif
 
