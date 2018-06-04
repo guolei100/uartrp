@@ -6,8 +6,6 @@
 #include	"config.h"
 
 
-#define  BAUD_SAVE_ADDR    0
-
 
 extern void eeprom_erase_sector(u16 EE_address);
 extern void eeprom_read(u16 EE_address,u8 *DataAddress,u8 length);

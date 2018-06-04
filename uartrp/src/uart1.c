@@ -8,8 +8,7 @@ volatile bit	tx1_Busy = 0;
 
 static enum ODD_EVEN uart1OddEven = NONE_ODD_EVEN;
 
-u8  uart1RevBuf[REV_BUFF_LEN];
-u16 uart1RevLen = 0;
+
 
 void timer0_init(void)
 {
@@ -51,15 +50,18 @@ void timer0_init(void)
 
 void timer0_irq(void) interrupt 1
 {
-	  ET0=0;
-	  TR0=0;
-	  TF0=0;
+	ET0=0;
+	TR0=0;
+	TF0=0;
+	MUTEX_LOCK();
+	uartRepeater.proUart.recStat = FRAME_RECEIVED;
+	MUTEX_UNLOCK();
 	 
 }
 
 
 
-void uart1_init(u32 baud, enum  ODD_EVEN oddEven)
+void uart1_init( enum  ODD_EVEN oddEven)
 {
 
 
@@ -81,7 +83,7 @@ void uart1_init(u32 baud, enum  ODD_EVEN oddEven)
 	
 		PCON &= 0x7F;		//波特率不倍速
 		AUXR |= 0x01;       //串口1选择定时器2为波特率发生器
-		if((ODD == oddEven) || (EVEN == oddEven))
+		if((ODD == oddEven) || (EVEN == oddEven) || (MARK == oddEven) || (SPACE == oddEven))
 		{
 			SCON  |= 0xc0;		//方式3，9位数据,可变波特率
 
@@ -104,11 +106,7 @@ void uart1_init(u32 baud, enum  ODD_EVEN oddEven)
 
 void uart1_send_byte(u8 byte)
 {
-	
-	
 
-	
-	
 #if ENABLE_TIMOUT_SEND	
 	u16 cnt = 0;
 	while(tx1_Busy && (cnt++<TICKS_OUT));
@@ -125,6 +123,15 @@ void uart1_send_byte(u8 byte)
 	{
 		TB8 = parityTable256[byte];
 	}
+	else if(MARK == uart1OddEven)
+	{
+		TB8 = 1;
+	}
+	else if(SPACE == uart1OddEven)
+	{
+		TB8 = 0;
+	}
+	
 	SBUF = byte;
 	tx1_Busy = 1;
 }
@@ -171,14 +178,9 @@ void uart1_irq(void) interrupt 4  // 串行口1中断函数
 	{
 		RI = 0;
 		byte = SBUF;
-		if(uart1RevLen>=sizeof(uart1RevBuf))
-		{
-			uart1RevLen = 0;
-		}
-		uart1RevBuf[uart1RevLen++] = byte;
 		
 		//SBUF = byte;	   // 启动数据发送过程		
-
+		
 		TR0=0;
 	#if (TIMER0_RELOAD_VALUE < 65536UL)
 		TH0 = (u8)((65536UL - TIMER0_RELOAD_VALUE) / 256);
@@ -189,10 +191,8 @@ void uart1_irq(void) interrupt 4  // 串行口1中断函数
 	#endif
 		ET0=1;
 	  	TR0=1;
-		
-
-
-
+		prouart_isr(byte,&uartRepeater.proUart);
+	
 	}
 	//EA = 1;//开中断
 }

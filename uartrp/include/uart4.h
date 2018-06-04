@@ -22,7 +22,7 @@
 
 
 
-extern void uart4_init(u32 baud, enum  ODD_EVEN oddEven);
+extern void uart4_init( enum  ODD_EVEN oddEven);
 extern void uart4_send(u8 *pbuf,u16 n);
 
  

@@ -25,6 +25,8 @@
 
 #define  ENABLE_TIMOUT_SEND  0
 
+#define  SAVE_MARK        0x55aa
+#define  PARAM_SAVE_ADDR  0x0000
 
 
 typedef   char           s8;

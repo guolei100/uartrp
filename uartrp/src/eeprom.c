@@ -237,8 +237,8 @@ u8 save_buad(UART_BAUD *pbaud)
 	
 	if(pbaud)
 	{
-		eeprom_erase_sector(BAUD_SAVE_ADDR);
-		res = eeprom_write(BAUD_SAVE_ADDR,(u8 *)pbaud,sizeof(UART_BAUD));
+		eeprom_erase_sector(PARAM_SAVE_ADDR);
+		res = eeprom_write(PARAM_SAVE_ADDR,(u8 *)pbaud,sizeof(UART_BAUD));
 	}
 	return res;
 }
@@ -251,7 +251,7 @@ u8 read_buad(UART_BAUD *pbaud)
 	
 	if(pbaud)
 	{
-		eeprom_read(BAUD_SAVE_ADDR,(u8 *)pbaud,sizeof(UART_BAUD));
+		eeprom_read(PARAM_SAVE_ADDR,(u8 *)pbaud,sizeof(UART_BAUD));
 	}
 	return res;
 }

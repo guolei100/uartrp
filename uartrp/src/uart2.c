@@ -81,7 +81,7 @@ void uart2_init(u32 baud, enum  ODD_EVEN oddEven)
 	T2H = (u8)(t2Reload>>8);		//设定定时初值
 	AUXR |= 0x10;		//启动定时器2
 
-	if((ODD == oddEven) || (EVEN == oddEven))
+	if((ODD == oddEven) || (EVEN == oddEven) || (MARK == oddEven) || (SPACE == oddEven))
 	{
 		S2CON  |= 0x80;		//方式1，9位数据,可变波特率
 
@@ -138,6 +138,14 @@ void uart2_send_byte(u8 byte)
 	{
 		parityTable256[byte]?S2TB8_SET():S2TB8_CLR();
 	}
+	else if(MARK == uart2OddEven)
+	{
+		S2TB8_SET();
+	}
+	else if(SPACE == uart2OddEven)
+	{
+		S2TB8_CLR();
+	}
 	S2BUF = byte;
 	tx2Busy = 1;
 }
@@ -172,6 +180,7 @@ void uart2_irq(void) interrupt 8  // 串行口2中断函数
 	{
 		CLR_RI2();
 		byte = S2BUF;
+		//SBUF = byte;
 #if  0		 
 		S2BUF = byte;
 #else
@@ -180,7 +189,15 @@ void uart2_irq(void) interrupt 8  // 串行口2中断函数
 		TL1 = (u8)((65536UL - TIMER1_RELOAD_VALUE/12) % 256);
 		TR1 = 1;
 		ET1 = 1;
-		inuart_receive_isr(byte, &uartRepeater.outUart, &uartRepeater.inUart1);
+		if(NORMAL_COM == uartRepeater.mode)
+		{
+			inuart_receive_isr(byte, &uartRepeater.outUart, &uartRepeater.inUart1);
+		}
+		else
+		{
+			prouart_isr(byte,  &uartRepeater.inUart1);
+		}
+		P32 = ~P32;
 #endif	
 	//EA = 1;//开中断
 	}

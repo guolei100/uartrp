@@ -37,7 +37,7 @@ void timer3_irq(void) interrupt 19
 
 
 
-void uart3_init(u32 baud, enum  ODD_EVEN oddEven)
+void uart3_init( enum  ODD_EVEN oddEven)
 {
 #if 0
 	u16 t3Reload = 0;
@@ -54,7 +54,7 @@ void uart3_init(u32 baud, enum  ODD_EVEN oddEven)
 	//S3CON = 0x10;		//8位数据,可变波特率
 	S3CON &= ~0x40;     //串口3选择定时器2为波特率发生器
 
-	if((ODD == oddEven) || (EVEN == oddEven))
+	if((ODD == oddEven) || (EVEN == oddEven) || (MARK == oddEven) || (SPACE == oddEven))
 	{
 		S3CON  |= 0x80;		//方式1，9位数据,可变波特率
 		
@@ -108,6 +108,14 @@ void uart3_send_byte(u8 byte)
 	else if(EVEN == uart3OddEven)
 	{
 		parityTable256[byte]?S3TB8_SET():S3TB8_CLR();
+	}
+	else if(MARK == uart3OddEven)
+	{
+		S3TB8_SET();
+	}
+	else if(SPACE == uart3OddEven)
+	{
+		S3TB8_CLR();
 	}
 	S3BUF = byte;
 	tx3Busy = 1;

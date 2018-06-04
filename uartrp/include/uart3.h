@@ -18,7 +18,7 @@
 #define		UART3_INT_ENABLE()		IE2 |=  (1<<3)	
 #define		UART3_INT_DISABLE()		IE2 &= ~(1<<3)	
 
-extern void uart3_init(u32 baud, enum  ODD_EVEN oddEven);
+extern void uart3_init( enum  ODD_EVEN oddEven);
 extern void uart3_send(u8 *pbuf,u16 n);
 
 

@@ -55,28 +55,28 @@ enum  UART_PORT{
 	UART4_PORT     = 0x04,
 	NONE_UART      = 0xff
 };
-enum  BAUD{
-	BAUD9600      = 1,
-	BAUD14400     = 2,
-	BAUD19200     = 3,
-	BAUD38400     = 4,
-	BAUD56000     = 5,
-	BAUD57600     = 6,
-	BAUD115200    = 7
-};
+
 enum  ODD_EVEN{
 	NONE_ODD_EVEN = 0,
-	ODD           = 1,//奇校验
-	EVEN          = 2 //偶校验
+	ODD           = 1, //奇校验
+	EVEN          = 2, //偶校验
+	MARK          = 3, //正校验
+	SPACE         = 4  //负校验
+};
+enum  MODE_SET{
+	NORMAL_COM  = 0,
+	SET_UP      = 1//设置模式
 };
 
 typedef struct Uart_Baud
 {
 	enum UART_PORT   uartPort;
-	enum BAUD        baud;
+	s32              baud;
 	u8               dataLen;
 	enum  ODD_EVEN   oddEven;
-	u8               stopBits;	
+	u8               stopBits;
+	u16              saveMark;
+	u32              sum;
 }UART_BAUD;
 
 
@@ -109,9 +109,12 @@ typedef struct Out_Uart
 
 typedef struct Uart_Repeater
 {
-	OUT_UART  outUart;
-	UART_WAY  inUart1;//wifi
-	UART_WAY  inUart2;
+	OUT_UART        outUart;
+	UART_WAY        inUart1;//wifi
+	UART_WAY        inUart2;
+	UART_WAY        proUart;//uart1
+	enum MODE_SET   mode; 
+	u8             wifiCommStep;
 }UART_RETPEATER;
 
 
@@ -122,6 +125,7 @@ extern UART_RETPEATER uartRepeater;
 extern u8 odd_even_detect(u8 byte);
 extern void outuart_receive_isr(u8 recByte, UART_RETPEATER *prepeater);
 extern void inuart_receive_isr(u8 recByte, OUT_UART *pOutUart, UART_WAY *pInUart);
+extern void prouart_isr(u8 recByte, UART_WAY *pProUart);
 extern void repeater_running(void);
 extern s8 repeater_init(void); 
 

@@ -18,7 +18,7 @@
 extern u8  uart1RevBuf[REV_BUFF_LEN];
 extern u16 uart1RevLen ;
 
-extern void uart1_init(u32 baud, enum  ODD_EVEN oddEven);
+extern void uart1_init( enum  ODD_EVEN oddEven);
 extern void uart1_send(u8 *pbuf,u16 n);
 extern char putchar(char c);
 extern void UART1_SendString(char *s);

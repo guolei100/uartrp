@@ -36,7 +36,7 @@ void timer4_irq(void) interrupt 20
 
 
 
-void uart4_init(u32 baud, enum  ODD_EVEN oddEven)
+void uart4_init( enum  ODD_EVEN oddEven)
 {
 #if 0
 	u16 t4Reload = 0;
@@ -53,7 +53,7 @@ void uart4_init(u32 baud, enum  ODD_EVEN oddEven)
 	//S4CON = 0x10;		//8位数据,可变波特率
 	S4CON &= ~0x40;		//串口4选择定时器2为波特率发生器
 	
-	if((ODD == oddEven) || (EVEN == oddEven))
+	if((ODD == oddEven) || (EVEN == oddEven) || (MARK == oddEven) || (SPACE == oddEven))
 	{
 		S4CON  |= 0x80; 	//方式1，9位数据,可变波特率
 		
@@ -107,7 +107,14 @@ void uart4_send_byte(u8 byte)
 	{
 		parityTable256[byte]?S4TB8_SET():S4TB8_CLR();
 	}
-	
+	else if(MARK == uart4OddEven)
+	{
+		S4TB8_SET();
+	}
+	else if(SPACE == uart4OddEven)
+	{
+		S4TB8_CLR();
+	}
 	S4BUF = byte;
 	tx4Busy = 1;
 }

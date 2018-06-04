@@ -154,7 +154,7 @@ void run_led(void)
 }
 
 
-u8 eepromWrBuf[12] = {0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x55,0xaa};
+u8 eepromWrBuf[12] = {0x99,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x55,0xaa};
 u8 eepromRdBuf[12];
 
 void test_eeprom(void)
@@ -164,8 +164,11 @@ void test_eeprom(void)
 
 	
 	
-#if 1	
+#if 1
+	eeprom_erase_sector(0x00);
 	eeprom_write(0x00, eepromWrBuf, sizeof(eepromWrBuf));
+
+	
 	memset(eepromRdBuf,0,sizeof(eepromRdBuf));
 	eeprom_read(0x00, eepromRdBuf, sizeof(eepromRdBuf));
 	for(i=0; i<sizeof(eepromRdBuf);i++)
@@ -199,7 +202,7 @@ void test_uart(void)
 	}
 }
 
-#define  JIAO_XIAN    ODD
+#define  JIAO_XIAN    NONE_ODD_EVEN
 void main()
 {	
 	//P24推挽输出
@@ -215,10 +218,6 @@ void main()
 	P2M0 |=  0x02;
 
 	
-	uart2_init(9600,JIAO_XIAN);
-	uart1_init(9600,JIAO_XIAN);
-	uart4_init(9600,JIAO_XIAN);
-	uart3_init(9600,JIAO_XIAN);
 	P24 = 0;
 	P25 = 0;
 	
